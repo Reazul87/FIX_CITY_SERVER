@@ -142,6 +142,96 @@ async function run() {
       res.send("Fix City Server Running!");
     });
 
+    app.post("/login-user", async (req, res) => {
+      try {
+        const { email, password } = req.body;
+        const isExists = await usersColl.findOne({ email });
+
+        if (!isExists) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid email !",
+          });
+        }
+
+        const hashedPassword = isExists.password;
+        let comparePassword = await bcrypt.compare(
+          password || "Password123",
+          hashedPassword
+        );
+
+        if (!comparePassword) {
+          return res
+            .status(401)
+            .json({ success: false, message: "Invalid password !" });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: "Login successful !",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    app.post("/create-user", async (req, res) => {
+      try {
+        const { name, email, picture, password } = req.body;
+        let hashedPassword;
+        const isExists = await usersColl.findOne({ email });
+
+        if (isExists) {
+          return res.json({
+            success: false,
+            message: "Already have an account email !",
+          });
+        }
+
+        if (password) {
+          hashedPassword = await bcrypt.hash(password, 10);
+        } else {
+          hashedPassword = await bcrypt.hash(password || "Password123", 10);
+        }
+
+        const firebaseUser = await admin.auth().createUser({
+          email,
+          password,
+          displayName: name,
+          photoURL: picture || "https://i.pravatar.cc/1080",
+        });
+        console.log("firebaseUser", { firebaseUser });
+
+        const user_info = {
+          picture: picture || "https://i.pravatar.cc/1080",
+          name,
+          email,
+          role: "Citizen",
+          createdAt: createdAt(),
+          isPremium: false,
+          isBlocked: false,
+          uid: firebaseUser.uid,
+          provider: firebaseUser.providerData[0].providerId,
+        };
+
+        user_info.password = hashedPassword;
+        const user = await usersColl.insertOne(user_info);
+
+        res.status(201).json({
+          success: true,
+          message: "Registration Successful !",
+          data: user,
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
 
 
     app.use((req, res, next) => {
