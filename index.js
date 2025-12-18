@@ -5,11 +5,11 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 require("dotenv").config();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const serviceAccount = require("./serviceAccountKey.json");
-// const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
-//   "utf8"
-// );
-// const serviceAccount = JSON.parse(decoded);
+// const serviceAccount = require("./serviceAccountKey.json");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
+const serviceAccount = JSON.parse(decoded);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -47,7 +47,7 @@ const generateTrackingId = () => {
   const random = crypto.randomBytes(3).toString("hex").toLocaleUpperCase();
   return `${prefix}-${date}-${random}`;
 };
-console.log(generateTrackingId());
+//console.log(generateTrackingId());
 
 const verifyIdToken = async (req, res, next) => {
   const token = req.headers.authorization;
@@ -98,7 +98,7 @@ async function run() {
         const result = await trackingsColl.insertOne(log);
         return result;
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -475,7 +475,7 @@ async function run() {
       async (req, res) => {
         try {
           const status = req.query.status;
-          console.log(status);
+          //console.log(status);
 
           const query = {};
           if (status) {
@@ -491,7 +491,7 @@ async function run() {
             message: "All Issues getting successfully !",
           });
         } catch (error) {
-          console.log(error.message);
+          //console.log(error.message);
           res
             .status(500)
             .json({ success: false, message: "Internal Server Error" });
@@ -552,7 +552,7 @@ async function run() {
           message: "All Issues getting successfully !",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error" });
@@ -603,7 +603,7 @@ async function run() {
           message: "Login successful !",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error" });
@@ -635,7 +635,7 @@ async function run() {
           displayName: name,
           photoURL: picture || "https://i.pravatar.cc/1080",
         });
-        console.log("firebaseUser", { firebaseUser });
+        //console.log("firebaseUser", { firebaseUser });
 
         const user_info = {
           picture: picture || "https://i.pravatar.cc/1080",
@@ -658,7 +658,7 @@ async function run() {
           data: user,
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -685,7 +685,7 @@ async function run() {
           message: "Successfully getting result from staff Collection",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -705,7 +705,7 @@ async function run() {
           .status(200)
           .json({ success: true, data: result, message: "Issue Trackings" });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -744,7 +744,7 @@ async function run() {
             .status(200)
             .json({ success: true, data: result, message: "Issue Rejected !" });
         } catch (error) {
-          console.log(error.message);
+          //console.log(error.message);
           res
             .status(500)
             .json({ success: false, message: "Internal Server Error !" });
@@ -768,7 +768,7 @@ async function run() {
           if (status === "Resolved") {
             update_info.$set = { status: status, resolvedAt: at };
           }
-          console.log(status);
+          //console.log(status);
 
           const result = await issuesColl.updateOne(query, update_info);
 
@@ -784,7 +784,7 @@ async function run() {
             message: `Issue ${status} Successful !`,
           });
         } catch (error) {
-          console.log(error.message);
+          //console.log(error.message);
           res
             .status(500)
             .json({ success: false, message: "Internal Server Error !" });
@@ -810,7 +810,7 @@ async function run() {
           message: "Assigning Staff by id Successful",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -840,7 +840,7 @@ async function run() {
             .status(200)
             .json({ success: true, data: result, message: "Assigned Issue" });
         } catch (error) {
-          console.log(error.message);
+          //console.log(error.message);
           res
             .status(500)
             .json({ success: false, message: "Internal Server Error !" });
@@ -895,7 +895,7 @@ async function run() {
             message: "Assign Staff Successful !",
           });
         } catch (error) {
-          console.log(error.message);
+          //console.log(error.message);
           res
             .status(500)
             .json({ success: false, message: "Internal Server Error !" });
@@ -923,7 +923,7 @@ async function run() {
           message: "Successfully getting result from users Collection",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -951,7 +951,7 @@ async function run() {
             message: "User status updated",
           });
         } catch (error) {
-          console.log(error.message);
+          //console.log(error.message);
           res
             .status(500)
             .json({ success: false, message: "Internal Server Error !" });
@@ -985,7 +985,7 @@ async function run() {
           displayName: name,
           photoURL: picture || "https://i.pravatar.cc/1080",
         });
-        console.log("firebaseUser", { firebaseUser });
+        //console.log("firebaseUser", { firebaseUser });
 
         const user_info = {
           picture: picture || "https://i.pravatar.cc/1080",
@@ -1010,7 +1010,7 @@ async function run() {
           data: user,
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1029,7 +1029,7 @@ async function run() {
           message: "Issues Deleted Successful",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1049,7 +1049,7 @@ async function run() {
           message: "Issues by id Successful",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1069,7 +1069,7 @@ async function run() {
           message: "Payment by id Successful",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1092,7 +1092,7 @@ async function run() {
           message: "Payments history Successful",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1134,7 +1134,7 @@ async function run() {
           data: report,
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1147,7 +1147,7 @@ async function run() {
         const { status, category, priority } = req.query;
 
         const query = { issueBy: email };
-        console.log(email, query);
+        //console.log(email, query);
 
         if (status) {
           query.status = status;
@@ -1168,7 +1168,7 @@ async function run() {
           message: "Successfully Reported Issues getting",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1200,7 +1200,7 @@ async function run() {
           message: "Updated Issue Successful !",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1224,7 +1224,7 @@ async function run() {
           message: `Staff goes to ${update.status}`,
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1240,7 +1240,7 @@ async function run() {
           .status(200)
           .json({ success: true, result, message: "Getting role" });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1274,7 +1274,7 @@ async function run() {
           message: "Successfully getting result from users Collection",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1357,12 +1357,12 @@ async function run() {
 
         const result = await issuesColl.updateOne(query, update_info);
 
-        console.log(isExist, update_info);
+        //console.log(isExist, update_info);
         res
           .status(200)
           .json({ success: true, data: result, message: "Issue upvoted !" });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1389,7 +1389,7 @@ async function run() {
           message: "Issues Deleted Successful",
         });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1428,7 +1428,7 @@ async function run() {
 
         res.send({ url: session.url });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error" });
@@ -1478,7 +1478,7 @@ async function run() {
           paidAt: paid,
           trackingId,
         };
-        console.log(payment_success.trackingId);
+        //console.log(payment_success.trackingId);
 
         const result2 = await paymentsColl.insertOne(payment_success);
 
@@ -1531,7 +1531,7 @@ async function run() {
 
         res.send({ url: session.url });
       } catch (error) {
-        console.log(error.message);
+        //console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error" });
@@ -1588,7 +1588,7 @@ async function run() {
           paidAt: paid,
           trackingId: trackingId,
         };
-        console.log(payment_success.user_name);
+        //console.log(payment_success.user_name);
 
         const result2 = await paymentsColl.insertOne(payment_success);
 
@@ -1618,8 +1618,8 @@ async function run() {
       console.log(`Server running on port ${port}`);
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log("MongoDB connected successfully!");
+    // await client.db("admin").command({ ping: 1 });
+    // //console.log("MongoDB connected successfully!");
   } catch (err) {
     console.error("Server error:", err);
   }
