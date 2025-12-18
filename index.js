@@ -930,6 +930,37 @@ async function run() {
       }
     });
 
+    //COMPLETE MANAGE-USERS
+    app.patch(
+      "/block-unblock",
+      verifyIdToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { isBlocked, id } = req.body;
+          const query = { _id: new ObjectId(id) };
+
+          const update_info = {
+            $set: { isBlocked: isBlocked },
+          };
+
+          const result = await usersColl.updateOne(query, update_info);
+          res.send({
+            success: true,
+            data: result,
+            message: "User status updated",
+          });
+        } catch (error) {
+          console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
+      }
+    );
+
+   
+
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
       next();
