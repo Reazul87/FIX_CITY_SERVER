@@ -692,7 +692,67 @@ async function run() {
       }
     });
 
-   
+    //COMPLETE ISSUES-DETAILS
+    app.get("/issue-trackings/:trackingId", verifyIdToken, async (req, res) => {
+      try {
+        const trackingId = req.params.trackingId;
+        const query = { trackingId };
+        const result = await trackingsColl
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+        res
+          .status(200)
+          .json({ success: true, data: result, message: "Issue Trackings" });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE ALL-ISSUES-ADMIN
+    app.patch(
+      "/issue/:id/reject",
+      verifyIdToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const { rejected_id, trackingId } = req.body;
+
+          const update_info = {
+            $set: {
+              status: "Rejected",
+              rejected: true,
+              rejected_id,
+              rejectedAt: createdAt(),
+            },
+          };
+
+          const result = await issuesColl.updateOne(query, update_info);
+
+          await logsTrackings(
+            trackingId,
+            "Issue Rejected",
+            "Issue rejected by authority.",
+            req.userRole
+          );
+          res
+            .status(200)
+            .json({ success: true, data: result, message: "Issue Rejected !" });
+        } catch (error) {
+          console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
+      }
+    );
+
+    
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
