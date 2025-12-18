@@ -1076,7 +1076,71 @@ async function run() {
       }
     });
 
-  
+    //COMPLETE PAYMENTS
+    app.get("/payments-admin", verifyIdToken, verifyAdmin, async (req, res) => {
+      try {
+        const { type } = req.query;
+        const query = {};
+        if (type) {
+          query.plan = type;
+        }
+        const result = await paymentsColl.find(query).toArray();
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Payments history Successful",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    app.post("/create-issue", verifyIdToken, async (req, res) => {
+      const { title, category, description, location, image, issueBy, userId } =
+        req.body;
+      try {
+        const trackingId = generateTrackingId();
+        const issue_info = {
+          image,
+          title,
+          category,
+          location,
+          description,
+          issueBy,
+          reportedAt: createdAt(),
+          status: "Pending",
+          priority: "Low",
+          userId,
+          upvote: 0,
+          upvotedBy: [],
+          trackingId: trackingId,
+        };
+        const report = await issuesColl.insertOne(issue_info);
+
+        await logsTrackings(
+          trackingId,
+          "Issue Reported",
+          "Issue has been reported to develop country",
+          req.userRole
+        );
+
+        res.status(201).json({
+          success: true,
+          message: "Reported Successful !",
+          data: report,
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
