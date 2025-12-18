@@ -82,11 +82,66 @@ async function run() {
 
     const DB = client.db("FIX_CITY");
     const usersColl = DB.collection("users");
- 
+    const issuesColl = DB.collection("issues");
+    const paymentsColl = DB.collection("payments");
+    const trackingsColl = DB.collection("trackings");
+
+    const logsTrackings = async (trackingId, status, message, by) => {
+      try {
+        const log = {
+          trackingId,
+          status,
+          message,
+          by,
+          createdAt: createdAt(),
+        };
+        const result = await trackingsColl.insertOne(log);
+        return result;
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    };
+
+    // const verifyRole = (requiredRole) => async (req, res, next) => {
+    //   const userDoc = await usersColl.findOne({ email: req.user.email });
+    //   if (!userDoc || userDoc.role !== requiredRole) {
+    //     return res.status(403).json({ success: false, message: "Forbidden" });
+    //   }
+    //   req.userRole = userDoc.role;
+    //   next();
+    // };
+
+    // Admin Middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.user.email;
+      const query = { email };
+      const userDoc = await usersColl.findOne(query);
+      if (!userDoc || userDoc.role !== "Admin") {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+      req.userRole = userDoc.role;
+      next();
+    };
+
+    // Staff middleware
+    const verifyStaff = async (req, res, next) => {
+      const email = req.user.email;
+      const query = { email };
+      const userDoc = await usersColl.findOne(query);
+      if (!userDoc || userDoc?.role !== "Staff")
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      req.userRole = userDoc.role;
+      next();
+    };
+
     // Routes
     app.get("/", (req, res) => {
       res.send("Fix City Server Running!");
     });
+
 
 
     app.use((req, res, next) => {
