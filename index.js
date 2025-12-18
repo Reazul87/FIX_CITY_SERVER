@@ -142,7 +142,130 @@ async function run() {
       res.send("Fix City Server Running!");
     });
 
- 
+    app.get("/citizen-dashboard", verifyIdToken, async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Email is required" });
+        }
+
+        const query = { issueBy: email };
+
+        const totalIssues = await issuesColl.countDocuments(query);
+
+        const pending = await issuesColl.countDocuments({
+          ...query,
+          status: { $regex: /^pending$/i },
+        });
+
+        const inProgress = await issuesColl.countDocuments({
+          ...query,
+          status: { $regex: /^in.?progress$/i },
+        });
+
+        const resolved = await issuesColl.countDocuments({
+          ...query,
+          status: { $regex: /^(closed|resolved)$/i },
+        });
+
+        const totalPaymentsResult = await paymentsColl
+          .aggregate([
+            {
+              $match: {
+                customer_email: email,
+                payment_status: "paid",
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: "$amount" },
+              },
+            },
+          ])
+          .toArray();
+
+        const totalPayments =
+          totalPaymentsResult.length > 0
+            ? totalPaymentsResult[0].total / 100
+            : 0;
+
+        const monthlyPayments = await paymentsColl
+          .aggregate([
+            {
+              $match: {
+                customer_email: email,
+                payment_status: "paid",
+              },
+            },
+            {
+              $addFields: {
+                paidAtDate: { $toDate: "$paidAt" },
+              },
+            },
+            {
+              $group: {
+                _id: {
+                  year: { $year: "$paidAtDate" },
+                  month: { $month: "$paidAtDate" },
+                },
+                totalAmount: { $sum: "$amount" },
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                monthYear: {
+                  $dateToString: {
+                    format: "%B %Y",
+                    date: {
+                      $dateFromParts: {
+                        year: "$_id.year",
+                        month: "$_id.month",
+                        day: 1,
+                      },
+                    },
+                  },
+                },
+                totalAmount: 1,
+                count: 1,
+              },
+            },
+            { $sort: { "_id.year": -1, "_id.month": -1 } },
+          ])
+          .toArray();
+
+        const issues = await issuesColl
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.status(200).json({
+          success: true,
+          data: {
+            issues,
+            stats: {
+              totalIssues,
+              pending,
+              inProgress,
+              resolved,
+              totalPayments,
+              monthlyPayments,
+            },
+          },
+          message: "Dashboard data fetched successfully",
+        });
+      } catch (error) {
+        console.error("Citizen Dashboard Error:", error);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+
 
     //COMPLETE ALL-ISSUES
     app.get(
