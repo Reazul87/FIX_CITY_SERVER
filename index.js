@@ -99,9 +99,6 @@ async function run() {
         return result;
       } catch (error) {
         //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error !" });
       }
     };
 
@@ -498,6 +495,35 @@ async function run() {
         }
       }
     );
+
+    app.patch("/update-staff/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const { name, email, phone, picture } = req.body;
+        const update_info = {
+          $set: {
+            name,
+            email,
+            phone,
+            picture,
+          },
+        };
+        const result = await usersColl.updateOne(query, update_info);
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Staff Profile Updated",
+        });
+      } catch (error) {
+        //console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error" });
+      }
+    });
+
     // COMPLETE ALL-ISSUES-HOME
     app.get("/all-issues", verifyIdToken, async (req, res) => {
       try {
@@ -564,7 +590,7 @@ async function run() {
       try {
         const issues = await issuesColl
           .find({ status: { $in: ["Resolved"] } })
-          .sort({ resolvedAt: -1 })
+          .sort({ resolvedAt: -1 }) // || updatedAt : -1
           .limit(6)
           .toArray();
 
@@ -1336,10 +1362,12 @@ async function run() {
         const { upvotedBy } = req.body;
         const query = {
           _id: new ObjectId(id),
-          upvotedBy: { $ne: upvotedBy },
+          upvotedBy: upvotedBy,
+          // upvotedBy: { $ne: upvotedBy },
         };
 
-        const isExist = await issuesColl.findOne({ upvotedBy });
+        // const isExist = await issuesColl.findOne({ upvotedBy });
+        const isExist = await issuesColl.findOne(query);
 
         if (isExist) {
           return res.status(400).json({
@@ -1376,12 +1404,14 @@ async function run() {
         const query = { _id: new ObjectId(id) };
         const result = await issuesColl.deleteOne(query);
 
-        await logsTrackings(
-          trackingId,
-          "Issue Deleted",
-          "Issue removed from system.",
-          req.userRole
-        );
+        if (trackingId) {
+          await logsTrackings(
+            trackingId,
+            "Issue Deleted",
+            "Issue removed from system.",
+            "Citizen"
+          );
+        }
 
         res.send({
           success: true,
@@ -1552,30 +1582,22 @@ async function run() {
           success: true,
           data: isExists,
           message: "Already Paid!",
-          // transactionId: isExists.transactionId,
-          // trackingId,
         });
       }
 
-      // payment_intent: 'pi_3SZxLAGorrDieyaT0PYbCdO3',
-      // const trackingId = session.metadata.trackingId;
       if (session.payment_status === "paid") {
         const payForId = session.metadata.user_id;
         const query = { _id: new ObjectId(payForId) };
         const update = {
           $set: {
-            // payment: "Paid",
             paidAt: paid,
             isPremium: true,
             transactionId: session.payment_intent,
-            // priority: "Low",
-            // trackingId: trackingId,
           },
         };
 
         const result = await usersColl.updateOne(query, update);
 
-        // payment insert
         const payment_success = {
           plan: "Premium Subscription",
           amount: session.amount_total / 100,
@@ -1596,13 +1618,12 @@ async function run() {
           trackingId,
           "Profile Premium Subscription",
           "Upgraded to premium for unlimited reporting.",
-          req.userRole
+          "Citizen"
         );
         return res.send({
           success: true,
           data: payment_success,
           message: "Profile Premium Successful!",
-          // trackingId,
           transactionId: payment_success.transactionId,
         });
       }
@@ -1619,7 +1640,7 @@ async function run() {
     });
 
     // await client.db("admin").command({ ping: 1 });
-    // //console.log("MongoDB connected successfully!");
+    // console.log("MongoDB connected successfully!");
   } catch (err) {
     console.error("Server error:", err);
   }
