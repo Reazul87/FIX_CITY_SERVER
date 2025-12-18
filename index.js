@@ -752,7 +752,102 @@ async function run() {
       }
     );
 
-    
+    app.patch(
+      "/issue/status/:id",
+      verifyIdToken,
+      verifyStaff,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const { status, trackingId } = req.body;
+          const at = createdAt();
+          const update_info = {
+            $set: { status: status },
+          };
+          if (status === "Resolved") {
+            update_info.$set = { status: status, resolvedAt: at };
+          }
+          console.log(status);
+
+          const result = await issuesColl.updateOne(query, update_info);
+
+          await logsTrackings(
+            trackingId,
+            `Issue ${status}`,
+            "Staff is working on issue",
+            req.userRole
+          );
+          res.status(200).json({
+            success: true,
+            data: result,
+            message: `Issue ${status} Successful !`,
+          });
+        } catch (error) {
+          console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
+      }
+    );
+
+    //COMPLETE ALL-ISSUES-ADMIN
+    app.get("/user/:id", verifyIdToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const status = req.params.status;
+        const query = { _id: new ObjectId(id) };
+        if (status) {
+          query.status = status;
+        }
+
+        const result = await usersColl.findOne(query);
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Assigning Staff by id Successful",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE ASSIGNED-ISSUES
+    app.get(
+      "/issue/:staff_id/assigned",
+      verifyIdToken,
+      verifyStaff,
+      async (req, res) => {
+        try {
+          const staff_Id = req.params.staff_id;
+          const { status, priority } = req.query;
+          const query = { staff_Id: staff_Id };
+
+          if (status) {
+            query.status = status;
+          }
+          if (priority) {
+            query.priority = priority;
+          }
+
+          const result = await issuesColl.find(query).toArray();
+          res
+            .status(200)
+            .json({ success: true, data: result, message: "Assigned Issue" });
+        } catch (error) {
+          console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
+      }
+    );
+
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
