@@ -1329,7 +1329,74 @@ async function run() {
       }
     );
 
-   
+    //COMPLETE ALL-ISSUES-HOME
+    app.patch("/issues/:issueId/upvote", verifyIdToken, async (req, res) => {
+      try {
+        const id = req.params.issueId;
+        const { upvotedBy } = req.body;
+        const query = {
+          _id: new ObjectId(id),
+          upvotedBy: { $ne: upvotedBy },
+        };
+
+        const isExist = await issuesColl.findOne({ upvotedBy });
+
+        if (isExist) {
+          return res.status(400).json({
+            success: false,
+            message: "You already upvoted this issue",
+          });
+        }
+
+        const update_info = {
+          $addToSet: { upvotedBy },
+          $inc: {
+            upvote: 1,
+          },
+        };
+
+        const result = await issuesColl.updateOne(query, update_info);
+
+        console.log(isExist, update_info);
+        res
+          .status(200)
+          .json({ success: true, data: result, message: "Issue upvoted !" });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE ISSUES-DETAILS
+    app.delete("/delete-issue", verifyIdToken, async (req, res) => {
+      try {
+        const { id, trackingId } = req.query;
+        const query = { _id: new ObjectId(id) };
+        const result = await issuesColl.deleteOne(query);
+
+        await logsTrackings(
+          trackingId,
+          "Issue Deleted",
+          "Issue removed from system.",
+          req.userRole
+        );
+
+        res.send({
+          success: true,
+          data: result,
+          message: "Issues Deleted Successful",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+  
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
       next();
