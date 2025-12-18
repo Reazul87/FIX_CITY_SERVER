@@ -1141,6 +1141,73 @@ async function run() {
       }
     });
 
+    app.get("/see-issues/:email", verifyIdToken, async (req, res) => {
+      try {
+        const email = req.params.email;
+        const { status, category, priority } = req.query;
+
+        const query = { issueBy: email };
+        console.log(email, query);
+
+        if (status) {
+          query.status = status;
+        }
+
+        if (category) {
+          query.category = category;
+        }
+
+        if (priority) {
+          query.priority = priority;
+        }
+
+        const issues = await issuesColl.find(query).toArray();
+        res.status(200).json({
+          success: true,
+          data: issues,
+          message: "Successfully Reported Issues getting",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE ISSUES-DETAILS
+    app.patch("/update-issue/:id", verifyIdToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const update = req.body;
+
+        const query = { _id: new ObjectId(id) };
+        const update_info = {
+          $set: { ...update },
+        };
+        const result = await issuesColl.updateOne(query, update_info);
+
+        await logsTrackings(
+          update.trackingId,
+          "Issue Updated",
+          "Updated issue details for better clarity.",
+          req.userRole
+        );
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Updated Issue Successful !",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+  
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
