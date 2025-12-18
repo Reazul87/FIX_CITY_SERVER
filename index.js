@@ -142,6 +142,99 @@ async function run() {
       res.send("Fix City Server Running!");
     });
 
+ 
+
+    //COMPLETE ALL-ISSUES
+    app.get(
+      "/all-issues/admin",
+      verifyIdToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const status = req.query.status;
+          console.log(status);
+
+          const query = {};
+          if (status) {
+            query.status = status;
+          }
+          const result = await issuesColl
+            .find(query)
+            .sort({ isBoosted: -1 })
+            .toArray();
+          res.status(200).json({
+            success: true,
+            data: result,
+            message: "All Issues getting successfully !",
+          });
+        } catch (error) {
+          console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error" });
+        }
+      }
+    );
+    // COMPLETE ALL-ISSUES-HOME
+    app.get("/all-issues", verifyIdToken, async (req, res) => {
+      try {
+        const {
+          status,
+          category,
+          priority,
+          search,
+          page = 1,
+          limit = 9,
+        } = req.query;
+        const query = {};
+        if (status) {
+          query.status = status;
+        }
+        if (category) {
+          query.category = category;
+        }
+        if (priority) {
+          query.priority = priority;
+        }
+
+        if (search) {
+          query.$or = [
+            { title: { $regex: search, $options: "i" } },
+            { category: { $regex: search, $options: "i" } },
+            { location: { $regex: search, $options: "i" } },
+          ];
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const issues = await issuesColl
+          .find(query)
+          .sort({ isBoosted: -1 })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .toArray();
+
+        const totalIssues = await issuesColl.countDocuments(query);
+
+        res.status(200).json({
+          success: true,
+          data: issues,
+          pagination: {
+            currentPage: parseInt(page),
+            totalPages: Math.ceil(totalIssues / parseInt(limit)),
+            totalIssues,
+            hasNext: parseInt(page) < Math.ceil(totalIssues / parseInt(limit)),
+            hasPrev: parseInt(page) > 1,
+          },
+          message: "All Issues getting successfully !",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error" });
+      }
+    });
 
     // COMPLETE ALL-ISSUES-HOME
     app.get("/latest-resolved-issues", async (req, res) => {
