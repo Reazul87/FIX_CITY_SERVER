@@ -959,7 +959,84 @@ async function run() {
       }
     );
 
-   
+    //COMPLETE MANAGE-STAFF
+    app.post("/create-staff", verifyIdToken, verifyAdmin, async (req, res) => {
+      try {
+        const { name, email, picture, phone, password } = req.body;
+        let hashedPassword;
+        const isExists = await usersColl.findOne({ email });
+
+        if (isExists) {
+          return res.json({
+            success: false,
+            message: "Already have an account email !",
+          });
+        }
+
+        if (password) {
+          hashedPassword = await bcrypt.hash(password, 10);
+        } else {
+          hashedPassword = await bcrypt.hash(password || "Password123", 10);
+        }
+
+        const firebaseUser = await admin.auth().createUser({
+          email,
+          password,
+          displayName: name,
+          photoURL: picture || "https://i.pravatar.cc/1080",
+        });
+        console.log("firebaseUser", { firebaseUser });
+
+        const user_info = {
+          picture: picture || "https://i.pravatar.cc/1080",
+          name,
+          email,
+          phone,
+          role: "Staff",
+          createdAt: createdAt(),
+          isPremium: false,
+          isBlocked: false,
+          uid: firebaseUser.uid,
+          provider: "password",
+          status: "Available",
+        };
+
+        user_info.password = hashedPassword;
+        const user = await usersColl.insertOne(user_info);
+
+        res.status(201).json({
+          success: true,
+          message: "Staff Registration Successful !",
+          data: user,
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE MANAGE-STAFF
+    app.delete("/staff/:id", verifyIdToken, verifyAdmin, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const query = { _id: new ObjectId(id) };
+        const result = await usersColl.deleteOne(query);
+        res.send({
+          success: true,
+          data: result,
+          message: "Issues Deleted Successful",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+ 
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
