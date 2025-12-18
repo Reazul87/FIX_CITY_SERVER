@@ -1036,7 +1036,47 @@ async function run() {
       }
     });
 
- 
+    //COMPLETE ISSUES-DETAILS
+    app.get("/issue/:id", verifyIdToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await issuesColl.findOne(query);
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Issues by id Successful",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE ISSUES-DETAILS
+    app.get("/payment/:transactionId", verifyIdToken, async (req, res) => {
+      try {
+        const transactionId = req.params.transactionId;
+        const query = { transactionId: transactionId };
+        const result = await paymentsColl.findOne(query);
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Payment by id Successful",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+  
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
