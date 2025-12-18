@@ -1396,7 +1396,110 @@ async function run() {
       }
     });
 
-  
+    //ISSUE-BOOST-PAYMENT
+    app.post("/boost-issue-payment-checkout-session", async (req, res) => {
+      try {
+        const issue_info = req.body;
+
+        const amount = parseInt(issue_info.cost) * 100;
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "bdt",
+                product_data: {
+                  name: issue_info.issue_name,
+                },
+                unit_amount: amount,
+              },
+              quantity: 1,
+            },
+          ],
+          customer_email: issue_info.issueBy,
+          mode: "payment",
+          metadata: {
+            issue_id: issue_info.issue_id,
+            issue_name: issue_info.issue_name,
+            trackingId: issue_info.trackingId,
+          },
+          success_url: `${process.env.SITE_DOMAIN}/payment-success/?success=true&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled/${issue_info.issue_id}`,
+        });
+
+        res.send({ url: session.url });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    app.patch("/payment-boost-success", async (req, res) => {
+      const session_id = req.query.session_id;
+      const session = await stripe.checkout.sessions.retrieve(session_id);
+      const paid = createdAt();
+
+      const trackingId = session.metadata.trackingId;
+      const transactionId = session.payment_intent;
+      const query = { transactionId: transactionId };
+      const isExists = await paymentsColl.findOne(query);
+      if (isExists) {
+        return res.send({
+          success: true,
+          data: isExists,
+          message: "Already Paid!",
+        });
+      }
+
+      if (session.payment_status === "paid") {
+        const payForId = session.metadata.issue_id;
+        const query = { _id: new ObjectId(payForId) };
+        const update = {
+          $set: {
+            paidAt: paid,
+            isBoosted: true,
+            priority: "High",
+            transactionId: session.payment_intent,
+          },
+        };
+
+        const result = await issuesColl.updateOne(query, update);
+
+        const payment_success = {
+          plan: "Issue Boost",
+          amount: session.amount_total / 100,
+          currency: session.currency,
+          payment_status: session.payment_status,
+          customer_email: session.customer_email,
+          issue_id: session.metadata.issue_id,
+          issue_name: session.metadata.issue_name,
+          transactionId: session.payment_intent,
+          paidAt: paid,
+          trackingId,
+        };
+        console.log(payment_success.trackingId);
+
+        const result2 = await paymentsColl.insertOne(payment_success);
+
+        await logsTrackings(
+          trackingId,
+          "Issue Boosted Successful",
+          "Priority increased to high.",
+          "Citizen"
+        );
+        return res.send({
+          success: true,
+          data: payment_success,
+          message: "Issue Boost Successful!",
+          transactionId: payment_success.transactionId,
+        });
+      }
+
+      res.send({ success: false });
+    });
+
+   
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
       next();
