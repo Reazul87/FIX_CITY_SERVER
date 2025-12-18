@@ -1207,7 +1207,31 @@ async function run() {
       }
     });
 
-  
+    //COMPLETE PROFILE
+    app.patch("/status/:id/staff", verifyIdToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const update = req.body;
+        const update_info = {
+          $set: update,
+        };
+
+        const result = await usersColl.updateOne(query, update_info);
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: `Staff goes to ${update.status}`,
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
