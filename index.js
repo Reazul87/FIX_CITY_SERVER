@@ -142,6 +142,22 @@ async function run() {
       res.send("Fix City Server Running!");
     });
 
+
+    // COMPLETE ALL-ISSUES-HOME
+    app.get("/latest-resolved-issues", async (req, res) => {
+      try {
+        const issues = await issuesColl
+          .find({ status: { $in: ["Resolved"] } })
+          .sort({ resolvedAt: -1 })
+          .limit(6)
+          .toArray();
+
+        res.json({ success: true, data: issues });
+      } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+      }
+    });
+
     app.post("/login-user", async (req, res) => {
       try {
         const { email, password } = req.body;
@@ -224,6 +240,33 @@ async function run() {
           success: true,
           message: "Registration Successful !",
           data: user,
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE ALL-ISSUES
+    app.get("/all-staff", verifyIdToken, verifyAdmin, async (req, res) => {
+      const { role, status } = req.query;
+      try {
+        const query = {
+          role,
+        };
+
+        if (status) {
+          query.status = status;
+        }
+
+        const result = await usersColl.find(query).toArray();
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Successfully getting result from staff Collection",
         });
       } catch (error) {
         console.log(error.message);
