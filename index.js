@@ -848,6 +848,87 @@ async function run() {
       }
     );
 
+    //COMPLETE ALL-ISSUES-ADMIN
+    app.patch(
+      "/assigning-staff/:id",
+      verifyIdToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const query = {
+            _id: new ObjectId(id),
+          };
+          const {
+            staff_Id,
+            staff_picture,
+            staff_name,
+            staff_email,
+            trackingId,
+          } = req.body;
+
+          const assigned = createdAt();
+
+          const update_info = {
+            staff_Id,
+            staff_picture,
+            staff_name,
+            staff_email,
+            assignedAt: assigned,
+          };
+
+          const update = {
+            $set: { ...update_info, assigned: true },
+          };
+
+          const issue = await issuesColl.updateOne(query, update);
+
+          await logsTrackings(
+            trackingId,
+            "Assigned Staff",
+            `Staff has been assigned to this issue`,
+            req.userRole
+          );
+          res.status(200).json({
+            success: true,
+            data: issue,
+            message: "Assign Staff Successful !",
+          });
+        } catch (error) {
+          console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
+      }
+    );
+
+    //COMPLETE MANAGE-USERS
+    app.get("/all-users", verifyIdToken, verifyAdmin, async (req, res) => {
+      try {
+        const { role } = req.query;
+
+        const query = {
+          role: role,
+        };
+
+        const result = await usersColl
+          .find(query)
+          .sort({ isPremium: -1 })
+          .toArray();
+
+        res.status(200).json({
+          success: true,
+          data: result,
+          message: "Successfully getting result from users Collection",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
 
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
