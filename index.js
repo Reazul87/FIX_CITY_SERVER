@@ -1231,8 +1231,105 @@ async function run() {
       }
     });
 
-    
+    //COMPLETE ISSUES-DETAILS
+    app.get("/see-user/:email/role", verifyIdToken, async (req, res) => {
+      try {
+        const email = req.params.email;
+        const result = await usersColl.findOne({ email });
+        res
+          .status(200)
+          .json({ success: true, result, message: "Getting role" });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
 
+    //COMPLETE PROFILE
+    app.get("/see-user/:email", verifyIdToken, async (req, res) => {
+      try {
+        const { email } = req.params;
+        const { role } = req.query;
+        const query = {
+          email,
+        };
+
+        if (role) {
+          query.role = role;
+
+          const result = await usersColl.findOne(query);
+          return res.status(200).json({
+            success: true,
+            result,
+            message: "Successfully getting result from users Collection",
+          });
+        }
+
+        const result = await usersColl.findOne(query);
+        res.status(200).json({
+          success: true,
+          result,
+          message: "Successfully getting result from users Collection",
+        });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    //COMPLETE PROFILE
+    app.patch(
+      "/update-user/:email/profile",
+      verifyIdToken,
+      async (req, res) => {
+        try {
+          const { picture, name } = req.body;
+          const emailToUpdate = req.params.email;
+
+          const requesterEmail = req.user.email;
+
+          if (requesterEmail !== emailToUpdate) {
+            return res.status(403).json({
+              success: false,
+              message: "Forbidden: You can only update your own profile.",
+            });
+          }
+          const query = { email: emailToUpdate };
+
+          const update = {
+            $set: {
+              picture: picture,
+              name,
+            },
+          };
+
+          const result = await usersColl.updateOne(query, update);
+
+          if (result.matchedCount === 0) {
+            return res
+              .status(404)
+              .json({ success: false, message: "User not found." });
+          }
+
+          res.status(200).json({
+            success: true,
+            result,
+            message: "Update profile successful",
+          });
+        } catch (error) {
+          console.error("Profile update error:", error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
+      }
+    );
+
+   
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
       next();
