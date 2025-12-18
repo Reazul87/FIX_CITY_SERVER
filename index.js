@@ -1499,7 +1499,116 @@ async function run() {
       res.send({ success: false });
     });
 
-   
+    // PROFILE-SUBSCRIPTION-PAYMENT
+    app.post("/payment-checkout-session", async (req, res) => {
+      try {
+        const user_info = req.body;
+        const trackingId = generateTrackingId();
+        const amount = parseInt(user_info.cost) * 100;
+        const session = await stripe.checkout.sessions.create({
+          line_items: [
+            {
+              price_data: {
+                currency: "bdt",
+                product_data: {
+                  name: user_info.user_name,
+                },
+                unit_amount: amount,
+              },
+              quantity: 1,
+            },
+          ],
+          customer_email: user_info.user_email,
+          mode: "payment",
+          metadata: {
+            user_id: user_info.user_id,
+            user_name: user_info.user_name,
+            trackingId,
+          },
+          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?success=true&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+        });
+
+        res.send({ url: session.url });
+      } catch (error) {
+        console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error" });
+      }
+    });
+
+    app.patch("/payment-success", async (req, res) => {
+      const session_id = req.query.session_id;
+      const session = await stripe.checkout.sessions.retrieve(session_id);
+      const paid = createdAt();
+
+      const transactionId = session.payment_intent;
+      const trackingId = session.metadata.trackingId;
+      const query = { transactionId: transactionId };
+      const isExists = await paymentsColl.findOne(query);
+      if (isExists) {
+        return res.send({
+          success: true,
+          data: isExists,
+          message: "Already Paid!",
+          // transactionId: isExists.transactionId,
+          // trackingId,
+        });
+      }
+
+      // payment_intent: 'pi_3SZxLAGorrDieyaT0PYbCdO3',
+      // const trackingId = session.metadata.trackingId;
+      if (session.payment_status === "paid") {
+        const payForId = session.metadata.user_id;
+        const query = { _id: new ObjectId(payForId) };
+        const update = {
+          $set: {
+            // payment: "Paid",
+            paidAt: paid,
+            isPremium: true,
+            transactionId: session.payment_intent,
+            // priority: "Low",
+            // trackingId: trackingId,
+          },
+        };
+
+        const result = await usersColl.updateOne(query, update);
+
+        // payment insert
+        const payment_success = {
+          plan: "Premium Subscription",
+          amount: session.amount_total / 100,
+          currency: session.currency,
+          payment_status: session.payment_status,
+          customer_email: session.customer_email,
+          user_id: session.metadata.user_id,
+          user_name: session.metadata.user_name,
+          transactionId: session.payment_intent,
+          paidAt: paid,
+          trackingId: trackingId,
+        };
+        console.log(payment_success.user_name);
+
+        const result2 = await paymentsColl.insertOne(payment_success);
+
+        await logsTrackings(
+          trackingId,
+          "Profile Premium Subscription",
+          "Upgraded to premium for unlimited reporting.",
+          req.userRole
+        );
+        return res.send({
+          success: true,
+          data: payment_success,
+          message: "Profile Premium Successful!",
+          // trackingId,
+          transactionId: payment_success.transactionId,
+        });
+      }
+      res.send({ success: false });
+    });
+
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
       next();
