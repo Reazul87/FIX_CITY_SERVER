@@ -360,6 +360,112 @@ async function run() {
       }
     );
 
+    app.get(
+      "/admin-dashboard",
+      verifyIdToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const totalIssues = await issuesColl.countDocuments();
+          const pending = await issuesColl.countDocuments({
+            status: "Pending",
+          });
+          const inProgress = await issuesColl.countDocuments({
+            status: "In-Progress",
+          });
+          const resolved = await issuesColl.countDocuments({
+            status: { $in: ["Closed", "Resolved"] },
+          });
+          const rejected = await issuesColl.countDocuments({
+            status: "Rejected",
+          });
+
+          const paymentAgg = await paymentsColl
+            .aggregate([
+              { $match: { payment_status: "paid" } },
+              { $group: { _id: null, total: { $sum: "$amount" } } },
+            ])
+            .toArray();
+
+          const totalPayments =
+            paymentAgg.length > 0 ? paymentAgg[0].total / 100 : 0;
+
+          // Latest Data
+          const latestIssues = await issuesColl
+            .find()
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .toArray();
+
+          const latestPayments = await paymentsColl
+            .find({ payment_status: "paid" })
+            .sort({ paidAt: -1 })
+            .limit(5)
+            .toArray();
+
+          const latestUsers = await usersColl
+            .find()
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .toArray();
+
+          const allPayments = await paymentsColl
+            .find({ payment_status: "paid" })
+            .toArray();
+
+          const monthMap = {};
+
+          allPayments.forEach((payment) => {
+            const dateStr = payment.paidAt;
+            if (!dateStr) return;
+
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return;
+
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const key = `${year}-${month.toString().padStart(2, "0")}`;
+
+            monthMap[key] = monthMap[key] || { year, month, totalAmount: 0 };
+            monthMap[key].totalAmount += payment.amount;
+          });
+
+          const monthlyPayments = Object.values(monthMap)
+            .map((item) => ({
+              monthYear: new Date(item.year, item.month - 1).toLocaleString(
+                "en-US",
+                {
+                  month: "long",
+                  year: "numeric",
+                }
+              ),
+              totalAmount: item.totalAmount,
+            }))
+            .sort((a, b) => new Date(b.monthYear) - new Date(a.monthYear));
+
+          res.json({
+            success: true,
+            data: {
+              stats: {
+                totalIssues,
+                pending,
+                inProgress,
+                resolved,
+                rejected,
+                totalPayments,
+              },
+              latestIssues,
+              latestPayments,
+              latestUsers,
+              monthlyPayments,
+            },
+          });
+        } catch (error) {
+          console.error("Admin Dashboard Error:", error);
+          res.status(500).json({ success: false, message: "Server Error" });
+        }
+      }
+    );
 
     //COMPLETE ALL-ISSUES
     app.get(
@@ -586,7 +692,8 @@ async function run() {
       }
     });
 
-    
+   
+
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
       next();
