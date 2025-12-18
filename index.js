@@ -265,6 +265,100 @@ async function run() {
       }
     });
 
+    app.get(
+      "/staff-dashboard",
+      verifyIdToken,
+      verifyStaff,
+      async (req, res) => {
+        try {
+          const staff_email = req.query.staff_email;
+          if (!staff_email)
+            return res.status(400).json({ message: "Staff email required" });
+
+          const query = { staff_email };
+
+          const assignedIssues = await issuesColl
+            .find(query)
+            .sort({ createdAt: -1 })
+            .toArray();
+
+          const totalAssigned = assignedIssues.length;
+          const pending = assignedIssues.filter(
+            (i) => i.status === "Pending"
+          ).length;
+          const inProgress = assignedIssues.filter(
+            (i) => i.status === "In-Progress"
+          ).length;
+          const resolved = assignedIssues.filter((i) =>
+            ["Closed", "Resolved"].includes(i.status)
+          ).length;
+
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          const todaysIssues = assignedIssues.filter((i) => {
+            const dateStr = i.assignedAt || i.reportedAt || i.createdAt;
+            if (!dateStr) return false;
+
+            const issueDate = new Date(dateStr);
+            if (isNaN(issueDate.getTime())) return false;
+
+            return issueDate >= today && issueDate < tomorrow;
+          });
+
+          const monthMap = {};
+          assignedIssues
+            .filter((i) => ["Closed", "Resolved"].includes(i.status))
+            .forEach((i) => {
+              const dateStr = i.updatedAt || i.createdAt || i.reportedAt;
+              if (!dateStr) return;
+              const date = new Date(dateStr);
+              if (isNaN(date.getTime())) return;
+
+              const year = date.getFullYear();
+              const month = date.getMonth() + 1;
+              const key = `${year}-${month}`;
+
+              monthMap[key] = monthMap[key] || { year, month, count: 0 };
+              monthMap[key].count += 1;
+            });
+
+          const monthlyResolved = Object.values(monthMap)
+            .map((item) => ({
+              monthYear: new Date(item.year, item.month - 1).toLocaleString(
+                "en-US",
+                {
+                  month: "long",
+                  year: "numeric",
+                }
+              ),
+              count: item.count,
+            }))
+            .sort((a, b) => new Date(b.monthYear) - new Date(a.monthYear));
+
+          res.json({
+            success: true,
+            data: {
+              assignedIssues,
+              stats: {
+                totalAssigned,
+                pending,
+                inProgress,
+                resolved,
+                todaysTasks: todaysIssues.length,
+                todaysIssues,
+                monthlyResolved,
+              },
+            },
+          });
+        } catch (error) {
+          console.error(error);
+          res.status(500).json({ success: false, message: "Server Error" });
+        }
+      }
+    );
 
 
     //COMPLETE ALL-ISSUES
@@ -492,7 +586,7 @@ async function run() {
       }
     });
 
-
+    
     app.use((req, res, next) => {
       res.status(404).json({ success: false, message: "Api not found" });
       next();
