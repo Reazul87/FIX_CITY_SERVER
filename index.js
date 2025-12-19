@@ -95,6 +95,7 @@ async function run() {
           by,
           createdAt: createdAt(),
         };
+
         const result = await trackingsColl.insertOne(log);
         return result;
       } catch (error) {
@@ -134,133 +135,147 @@ async function run() {
       next();
     };
 
+    // Citizen middleware
+    const verifyCitizen = async (req, res, next) => {
+      const email = req.user.email;
+      const query = { email };
+      const userDoc = await usersColl.findOne(query);
+      if (!userDoc || userDoc?.role !== "Citizen")
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      req.userRole = userDoc.role;
+      next();
+    };
+
     // Routes
     app.get("/", (req, res) => {
       res.send("Fix City Server Running!");
     });
 
-    app.get("/citizen-dashboard", verifyIdToken, async (req, res) => {
-      try {
-        const email = req.query.email;
-        if (!email) {
-          return res
-            .status(400)
-            .json({ success: false, message: "Email is required" });
-        }
+    app.get(
+      "/citizen-dashboard",
+      verifyIdToken,
+      verifyCitizen,
+      async (req, res) => {
+        try {
+          const email = req.user.email;
+          if (!email) {
+            return res
+              .status(400)
+              .json({ success: false, message: "Email is required" });
+          }
 
-        const query = { issueBy: email };
+          const query = { issueBy: email };
 
-        const totalIssues = await issuesColl.countDocuments(query);
+          const totalIssues = await issuesColl.countDocuments(query);
 
-        const pending = await issuesColl.countDocuments({
-          ...query,
-          status: { $regex: /^pending$/i },
-        });
+          const pending = await issuesColl.countDocuments({
+            ...query,
+            status: { $regex: /^pending$/i },
+          });
 
-        const inProgress = await issuesColl.countDocuments({
-          ...query,
-          status: { $regex: /^in.?progress$/i },
-        });
+          const inProgress = await issuesColl.countDocuments({
+            ...query,
+            status: { $regex: /^in.?progress$/i },
+          });
 
-        const resolved = await issuesColl.countDocuments({
-          ...query,
-          status: { $regex: /^(closed|resolved)$/i },
-        });
+          const resolved = await issuesColl.countDocuments({
+            ...query,
+            status: { $regex: /^(closed|resolved)$/i },
+          });
 
-        const totalPaymentsResult = await paymentsColl
-          .aggregate([
-            {
-              $match: {
-                customer_email: email,
-                payment_status: "paid",
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                total: { $sum: "$amount" },
-              },
-            },
-          ])
-          .toArray();
-
-        const totalPayments =
-          totalPaymentsResult.length > 0
-            ? totalPaymentsResult[0].total / 100
-            : 0;
-
-        const monthlyPayments = await paymentsColl
-          .aggregate([
-            {
-              $match: {
-                customer_email: email,
-                payment_status: "paid",
-              },
-            },
-            {
-              $addFields: {
-                paidAtDate: { $toDate: "$paidAt" },
-              },
-            },
-            {
-              $group: {
-                _id: {
-                  year: { $year: "$paidAtDate" },
-                  month: { $month: "$paidAtDate" },
+          const totalPaymentsResult = await paymentsColl
+            .aggregate([
+              {
+                $match: {
+                  customer_email: email,
+                  payment_status: "paid",
                 },
-                totalAmount: { $sum: "$amount" },
-                count: { $sum: 1 },
               },
-            },
-            {
-              $project: {
-                monthYear: {
-                  $dateToString: {
-                    format: "%B %Y",
-                    date: {
-                      $dateFromParts: {
-                        year: "$_id.year",
-                        month: "$_id.month",
-                        day: 1,
+              {
+                $group: {
+                  _id: null,
+                  total: { $sum: "$amount" },
+                },
+              },
+            ])
+            .toArray();
+
+          const totalPayments =
+            totalPaymentsResult.length > 0 ? totalPaymentsResult[0].total : 0;
+
+          const monthlyPayments = await paymentsColl
+            .aggregate([
+              {
+                $match: {
+                  customer_email: email,
+                  payment_status: "paid",
+                },
+              },
+              {
+                $addFields: {
+                  paidAtDate: { $toDate: "$paidAt" },
+                },
+              },
+              {
+                $group: {
+                  _id: {
+                    year: { $year: "$paidAtDate" },
+                    month: { $month: "$paidAtDate" },
+                  },
+                  totalAmount: { $sum: "$amount" },
+                  count: { $sum: 1 },
+                },
+              },
+              {
+                $project: {
+                  monthYear: {
+                    $dateToString: {
+                      format: "%B %Y",
+                      date: {
+                        $dateFromParts: {
+                          year: "$_id.year",
+                          month: "$_id.month",
+                          day: 1,
+                        },
                       },
                     },
                   },
+                  totalAmount: 1,
+                  count: 1,
                 },
-                totalAmount: 1,
-                count: 1,
+              },
+              { $sort: { "_id.year": -1, "_id.month": -1 } },
+            ])
+            .toArray();
+
+          const issues = await issuesColl
+            .find(query)
+            .sort({ createdAt: -1 })
+            .toArray();
+
+          res.status(200).json({
+            success: true,
+            data: {
+              issues,
+              stats: {
+                totalIssues,
+                pending,
+                inProgress,
+                resolved,
+                totalPayments,
+                monthlyPayments,
               },
             },
-            { $sort: { "_id.year": -1, "_id.month": -1 } },
-          ])
-          .toArray();
-
-        const issues = await issuesColl
-          .find(query)
-          .sort({ createdAt: -1 })
-          .toArray();
-
-        res.status(200).json({
-          success: true,
-          data: {
-            issues,
-            stats: {
-              totalIssues,
-              pending,
-              inProgress,
-              resolved,
-              totalPayments,
-              monthlyPayments,
-            },
-          },
-          message: "Dashboard data fetched successfully",
-        });
-      } catch (error) {
-        console.error("Citizen Dashboard Error:", error);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error" });
+            message: "Dashboard data fetched successfully",
+          });
+        } catch (error) {
+          console.error("Citizen Dashboard Error:", error);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error" });
+        }
       }
-    });
+    );
 
     app.get(
       "/staff-dashboard",
@@ -268,7 +283,7 @@ async function run() {
       verifyStaff,
       async (req, res) => {
         try {
-          const staff_email = req.query.staff_email;
+          const staff_email = req.user.email;
           if (!staff_email)
             return res.status(400).json({ message: "Staff email required" });
 
@@ -284,7 +299,7 @@ async function run() {
             (i) => i.status === "Pending"
           ).length;
           const inProgress = assignedIssues.filter(
-            (i) => i.status === "In-Progress"
+            (i) => i.status === "In-progress"
           ).length;
           const resolved = assignedIssues.filter((i) =>
             ["Closed", "Resolved"].includes(i.status)
@@ -368,7 +383,7 @@ async function run() {
             status: "Pending",
           });
           const inProgress = await issuesColl.countDocuments({
-            status: "In-Progress",
+            status: "In-progress",
           });
           const resolved = await issuesColl.countDocuments({
             status: { $in: ["Closed", "Resolved"] },
@@ -384,8 +399,7 @@ async function run() {
             ])
             .toArray();
 
-          const totalPayments =
-            paymentAgg.length > 0 ? paymentAgg[0].total / 100 : 0;
+          const totalPayments = paymentAgg.length > 0 ? paymentAgg[0].total : 0;
 
           // Latest Data
           const latestIssues = await issuesColl
@@ -496,36 +510,53 @@ async function run() {
       }
     );
 
-    app.patch("/update-staff/:id", async (req, res) => {
-      try {
-        const id = req.params.id;
-        const query = { _id: new ObjectId(id) };
-        const { name, email, phone, picture } = req.body;
-        const update_info = {
-          $set: {
-            name,
-            email,
-            phone,
-            picture,
-          },
-        };
-        const result = await usersColl.updateOne(query, update_info);
+    app.patch(
+      "/update-staff/:id",
+      verifyIdToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const { name, email, phone, picture } = req.body;
+          const user = await usersColl.findOne({ email });
+          const uid = user.uid;
 
-        res.status(200).json({
-          success: true,
-          data: result,
-          message: "Staff Profile Updated",
-        });
-      } catch (error) {
-        //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error" });
+          const userRecord = await admin.auth().updateUser(uid, {
+            email,
+            displayName: name,
+            photoURL: picture,
+          });
+          // console.log(userRecord);
+
+          const update_info = {
+            $set: {
+              name,
+              email,
+              phone,
+              picture,
+            },
+          };
+          const result = await usersColl.updateOne(query, update_info);
+          // console.log(query, result);
+
+          res.status(200).json({
+            success: true,
+            data: result,
+            userRecord,
+            message: "Staff Profile Updated",
+          });
+        } catch (error) {
+          //console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error" });
+        }
       }
-    });
+    );
 
     // COMPLETE ALL-ISSUES-HOME
-    app.get("/all-issues", verifyIdToken, async (req, res) => {
+    app.get("/all-issues", async (req, res) => {
       try {
         const {
           status,
@@ -565,15 +596,21 @@ async function run() {
 
         const totalIssues = await issuesColl.countDocuments(query);
 
+        const currentPage = parseInt(page);
+        const totalPages = Math.ceil(totalIssues / parseInt(limit));
+        const hasNext =
+          parseInt(page) < Math.ceil(totalIssues / parseInt(limit));
+        const hasPrev = parseInt(page) > 1;
+
         res.status(200).json({
           success: true,
           data: issues,
           pagination: {
-            currentPage: parseInt(page),
-            totalPages: Math.ceil(totalIssues / parseInt(limit)),
+            currentPage,
+            totalPages,
             totalIssues,
-            hasNext: parseInt(page) < Math.ceil(totalIssues / parseInt(limit)),
-            hasPrev: parseInt(page) > 1,
+            hasNext,
+            hasPrev,
           },
           message: "All Issues getting successfully !",
         });
@@ -603,43 +640,72 @@ async function run() {
     app.post("/login-user", async (req, res) => {
       try {
         const { email, password } = req.body;
-        const isExists = await usersColl.findOne({ email });
 
-        if (!isExists) {
+        const user = await usersColl.findOne({ email });
+        if (!user) {
           return res.status(401).json({
             success: false,
-            message: "Invalid email !",
+            message: "Invalid email!",
           });
         }
 
-        const hashedPassword = isExists.password;
-        let comparePassword = await bcrypt.compare(
-          password || "Password123",
-          hashedPassword
-        );
-
+        const comparePassword = await bcrypt.compare(password, user.password);
         if (!comparePassword) {
-          return res
-            .status(401)
-            .json({ success: false, message: "Invalid password !" });
+          return res.status(401).json({
+            success: false,
+            message: "Invalid password!",
+          });
         }
 
         res.status(200).json({
           success: true,
-          message: "Login successful !",
+          data: user,
+          message: "Login successful!",
         });
       } catch (error) {
-        //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error" });
+        // console.error("Login error:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+      }
+    });
+
+    app.post("/login-google-user", async (req, res) => {
+      try {
+        const { email, provider } = req.body;
+
+        const user = await usersColl.findOne({ email });
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid email",
+          });
+        }
+
+        const alternative = "Password123";
+
+        const password = await bcrypt.compare(alternative, user.password);
+        if (!password) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid password",
+          });
+        }
+
+        if (user.provider === provider) {
+          return res.status(200).json({
+            success: true,
+            data: user,
+            message: "Google Login successful",
+          });
+        }
+      } catch (error) {
+        // console.error("Login error:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
       }
     });
 
     app.post("/create-user", async (req, res) => {
       try {
         const { name, email, picture, password } = req.body;
-        let hashedPassword;
         const isExists = await usersColl.findOne({ email });
 
         if (isExists) {
@@ -648,20 +714,14 @@ async function run() {
             message: "Already have an account email !",
           });
         }
-
-        if (password) {
-          hashedPassword = await bcrypt.hash(password, 10);
-        } else {
-          hashedPassword = await bcrypt.hash(password || "Password123", 10);
-        }
-
+        const hashedPassword = await bcrypt.hash(password, 10);
         const firebaseUser = await admin.auth().createUser({
           email,
-          password,
+          password: password,
           displayName: name,
           photoURL: picture || "https://i.pravatar.cc/1080",
         });
-        //console.log("firebaseUser", { firebaseUser });
+        // console.log("firebaseUser", { firebaseUser });
 
         const user_info = {
           picture: picture || "https://i.pravatar.cc/1080",
@@ -674,8 +734,8 @@ async function run() {
           uid: firebaseUser.uid,
           provider: firebaseUser.providerData[0].providerId,
         };
-
         user_info.password = hashedPassword;
+
         const user = await usersColl.insertOne(user_info);
 
         res.status(201).json({
@@ -684,7 +744,50 @@ async function run() {
           data: user,
         });
       } catch (error) {
-        //console.log(error.message);
+        // console.log(error.message);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error !" });
+      }
+    });
+
+    app.post("/create-google-user", async (req, res) => {
+      try {
+        const { name, email, picture, provider, uid } = req.body;
+        const isExists = await usersColl.findOne({ email });
+
+        if (isExists) {
+          return res.json({
+            success: false,
+            message: "Already have an account email !",
+          });
+        }
+
+        const alternative = "Password123";
+
+        const hashedPassword = await bcrypt.hash(alternative, 10);
+
+        const user_info = {
+          picture: picture || "https://i.pravatar.cc/1080",
+          name,
+          email,
+          role: "Citizen",
+          createdAt: createdAt(),
+          isPremium: false,
+          isBlocked: false,
+          uid: uid,
+          provider: provider,
+        };
+        user_info.password = hashedPassword;
+        const user = await usersColl.insertOne(user_info);
+
+        res.status(201).json({
+          success: true,
+          message: "Google Registration Successful !",
+          data: user,
+        });
+      } catch (error) {
+        // console.log(error.message);
         res
           .status(500)
           .json({ success: false, message: "Internal Server Error !" });
@@ -1020,7 +1123,7 @@ async function run() {
           phone,
           role: "Staff",
           createdAt: createdAt(),
-          isPremium: false,
+          isPremium: true,
           isBlocked: false,
           uid: firebaseUser.uid,
           provider: "password",
@@ -1125,51 +1228,63 @@ async function run() {
       }
     });
 
-    app.post("/create-issue", verifyIdToken, async (req, res) => {
-      const { title, category, description, location, image, issueBy, userId } =
-        req.body;
-      try {
-        const trackingId = generateTrackingId();
-        const issue_info = {
-          image,
+    app.post(
+      "/create-issue",
+      verifyIdToken,
+      verifyCitizen,
+      async (req, res) => {
+        const {
           title,
           category,
-          location,
           description,
+          location,
+          image,
           issueBy,
-          reportedAt: createdAt(),
-          status: "Pending",
-          priority: "Low",
           userId,
-          upvote: 0,
-          upvotedBy: [],
-          trackingId: trackingId,
-        };
-        const report = await issuesColl.insertOne(issue_info);
+        } = req.body;
+        try {
+          const trackingId = generateTrackingId();
+          const issue_info = {
+            image,
+            title,
+            category,
+            location,
+            description,
+            issueBy,
+            reportedAt: createdAt(),
+            status: "Pending",
+            priority: "Low",
+            userId,
+            upvote: 0,
+            upvotedBy: [],
+            trackingId: trackingId,
+          };
+          const report = await issuesColl.insertOne(issue_info);
 
-        await logsTrackings(
-          trackingId,
-          "Issue Reported",
-          "Issue has been reported to develop country",
-          req.userRole
-        );
+          await logsTrackings(
+            trackingId,
+            "Issue Reported",
+            "Issue has been reported to develop country",
+            req.userRole
+          );
 
-        res.status(201).json({
-          success: true,
-          message: "Reported Successful !",
-          data: report,
-        });
-      } catch (error) {
-        //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error !" });
+          res.status(201).json({
+            success: true,
+            message: "Reported Successful !",
+            data: report,
+          });
+        } catch (error) {
+          //console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
       }
-    });
+    );
 
     app.get("/see-issues/:email", verifyIdToken, async (req, res) => {
       try {
-        const email = req.params.email;
+        const email = req.user.email;
         const { status, category, priority } = req.query;
 
         const query = { issueBy: email };
@@ -1202,36 +1317,61 @@ async function run() {
     });
 
     //COMPLETE ISSUES-DETAILS
-    app.patch("/update-issue/:id", verifyIdToken, async (req, res) => {
-      try {
-        const id = req.params.id;
-        const update = req.body;
+    app.patch(
+      "/update-issue/:id",
+      verifyIdToken,
+      verifyCitizen,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const update = req.body;
+          const issue = await issuesColl.findOne({ _id: new ObjectId(id) });
+          if (issue.userId !== req.user.uid) {
+            return res
+              .status(403)
+              .json({ success: false, message: "Forbidden" });
+          }
 
-        const query = { _id: new ObjectId(id) };
-        const update_info = {
-          $set: { ...update },
-        };
-        const result = await issuesColl.updateOne(query, update_info);
+          const query = { _id: new ObjectId(id) };
+          const queryUser = { email: update.issueBy };
 
-        await logsTrackings(
-          update.trackingId,
-          "Issue Updated",
-          "Updated issue details for better clarity.",
-          req.userRole
-        );
+          const user = await usersColl.findOne(queryUser);
 
-        res.status(200).json({
-          success: true,
-          data: result,
-          message: "Updated Issue Successful !",
-        });
-      } catch (error) {
-        //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error !" });
+          const isBlocked = user.isBlocked;
+
+          if (isBlocked) {
+            return res.status(400).json({
+              success: false,
+              isBlocked: isBlocked,
+              message: "Access Denied: Your account is blocked.",
+            });
+          }
+
+          const update_info = {
+            $set: { ...update },
+          };
+          const result = await issuesColl.updateOne(query, update_info);
+
+          await logsTrackings(
+            update.trackingId,
+            "Issue Updated",
+            "Updated issue details for better clarity.",
+            req.userRole
+          );
+
+          res.status(200).json({
+            success: true,
+            data: result,
+            message: "Updated Issue Successful",
+          });
+        } catch (error) {
+          //console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
+        }
       }
-    });
+    );
 
     //COMPLETE PROFILE
     app.patch("/status/:id/staff", verifyIdToken, async (req, res) => {
@@ -1362,12 +1502,12 @@ async function run() {
         const { upvotedBy } = req.body;
         const query = {
           _id: new ObjectId(id),
-          upvotedBy: upvotedBy,
-          // upvotedBy: { $ne: upvotedBy },
+          // upvotedBy: upvotedBy,
+          upvotedBy: { $ne: upvotedBy },
         };
 
-        // const isExist = await issuesColl.findOne({ upvotedBy });
-        const isExist = await issuesColl.findOne(query);
+        const isExist = await issuesColl.findOne({ upvotedBy });
+        // const isExist = await issuesColl.findOne(query);
 
         if (isExist) {
           return res.status(400).json({
@@ -1398,72 +1538,82 @@ async function run() {
     });
 
     //COMPLETE ISSUES-DETAILS
-    app.delete("/delete-issue", verifyIdToken, async (req, res) => {
-      try {
-        const { id, trackingId } = req.query;
-        const query = { _id: new ObjectId(id) };
-        const result = await issuesColl.deleteOne(query);
+    app.delete(
+      "/delete-issue",
+      verifyIdToken,
+      verifyCitizen,
+      async (req, res) => {
+        try {
+          const { id, trackingId } = req.query;
+          const query = { _id: new ObjectId(id) };
+          const result = await issuesColl.deleteOne(query);
 
-        if (trackingId) {
-          await logsTrackings(
-            trackingId,
-            "Issue Deleted",
-            "Issue removed from system.",
-            "Citizen"
-          );
+          if (trackingId) {
+            await logsTrackings(
+              trackingId,
+              "Issue Deleted",
+              "Issue removed from system.",
+              req.userRole
+            );
+          }
+
+          res.send({
+            success: true,
+            data: result,
+            message: "Issues Deleted Successful",
+          });
+        } catch (error) {
+          //console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error !" });
         }
-
-        res.send({
-          success: true,
-          data: result,
-          message: "Issues Deleted Successful",
-        });
-      } catch (error) {
-        //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error !" });
       }
-    });
+    );
 
     //ISSUE-BOOST-PAYMENT
-    app.post("/boost-issue-payment-checkout-session", async (req, res) => {
-      try {
-        const issue_info = req.body;
+    app.post(
+      "/boost-issue-payment-checkout-session",
+      verifyIdToken,
+      verifyCitizen,
+      async (req, res) => {
+        try {
+          const issue_info = req.body;
 
-        const amount = parseInt(issue_info.cost) * 100;
-        const session = await stripe.checkout.sessions.create({
-          line_items: [
-            {
-              price_data: {
-                currency: "bdt",
-                product_data: {
-                  name: issue_info.issue_name,
+          const amount = parseInt(issue_info.cost) * 100;
+          const session = await stripe.checkout.sessions.create({
+            line_items: [
+              {
+                price_data: {
+                  currency: "bdt",
+                  product_data: {
+                    name: issue_info.issue_name,
+                  },
+                  unit_amount: amount,
                 },
-                unit_amount: amount,
+                quantity: 1,
               },
-              quantity: 1,
+            ],
+            customer_email: issue_info.issueBy,
+            mode: "payment",
+            metadata: {
+              issue_id: issue_info.issue_id,
+              issue_name: issue_info.issue_name,
+              trackingId: issue_info.trackingId,
             },
-          ],
-          customer_email: issue_info.issueBy,
-          mode: "payment",
-          metadata: {
-            issue_id: issue_info.issue_id,
-            issue_name: issue_info.issue_name,
-            trackingId: issue_info.trackingId,
-          },
-          success_url: `${process.env.SITE_DOMAIN}/payment-success/?success=true&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled/${issue_info.issue_id}`,
-        });
+            success_url: `${process.env.SITE_DOMAIN}/payment-success/?success=true&session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled/${issue_info.issue_id}`,
+          });
 
-        res.send({ url: session.url });
-      } catch (error) {
-        //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error" });
+          res.send({ url: session.url });
+        } catch (error) {
+          //console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error" });
+        }
       }
-    });
+    );
 
     app.patch("/payment-boost-success", async (req, res) => {
       const session_id = req.query.session_id;
@@ -1530,43 +1680,48 @@ async function run() {
     });
 
     // PROFILE-SUBSCRIPTION-PAYMENT
-    app.post("/payment-checkout-session", async (req, res) => {
-      try {
-        const user_info = req.body;
-        const trackingId = generateTrackingId();
-        const amount = parseInt(user_info.cost) * 100;
-        const session = await stripe.checkout.sessions.create({
-          line_items: [
-            {
-              price_data: {
-                currency: "bdt",
-                product_data: {
-                  name: user_info.user_name,
+    app.post(
+      "/payment-checkout-session",
+      verifyIdToken,
+      verifyCitizen,
+      async (req, res) => {
+        try {
+          const user_info = req.body;
+          const trackingId = generateTrackingId();
+          const amount = parseInt(user_info.cost) * 100;
+          const session = await stripe.checkout.sessions.create({
+            line_items: [
+              {
+                price_data: {
+                  currency: "bdt",
+                  product_data: {
+                    name: user_info.user_name,
+                  },
+                  unit_amount: amount,
                 },
-                unit_amount: amount,
+                quantity: 1,
               },
-              quantity: 1,
+            ],
+            customer_email: user_info.user_email,
+            mode: "payment",
+            metadata: {
+              user_id: user_info.user_id,
+              user_name: user_info.user_name,
+              trackingId,
             },
-          ],
-          customer_email: user_info.user_email,
-          mode: "payment",
-          metadata: {
-            user_id: user_info.user_id,
-            user_name: user_info.user_name,
-            trackingId,
-          },
-          success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?success=true&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
-        });
+            success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?success=true&session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+          });
 
-        res.send({ url: session.url });
-      } catch (error) {
-        //console.log(error.message);
-        res
-          .status(500)
-          .json({ success: false, message: "Internal Server Error" });
+          res.send({ url: session.url });
+        } catch (error) {
+          //console.log(error.message);
+          res
+            .status(500)
+            .json({ success: false, message: "Internal Server Error" });
+        }
       }
-    });
+    );
 
     app.patch("/payment-success", async (req, res) => {
       const session_id = req.query.session_id;
