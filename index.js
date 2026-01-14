@@ -151,6 +151,37 @@ async function run() {
       res.send("Fix City Server Running!");
     });
 
+    app.post("/login-demo-user", async (req, res) => {
+      try {
+        const { email, password } = req.body;
+
+        const user = await usersColl.findOne({ email });
+        // if (!user) {
+        //   return res.status(401).json({
+        //     success: false,
+        //     message: "Invalid email!",
+        //   });
+        // }
+
+        const comparePassword = await bcrypt.compare(password, user.password);
+        // if (!comparePassword) {
+        //   return res.status(401).json({
+        //     success: false,
+        //     message: "Invalid password!",
+        //   });
+        // }
+
+        res.status(200).json({
+          success: true,
+          data: user,
+          message: "Login successful!",
+        });
+      } catch (error) {
+        console.error("Login error:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+      }
+    });
+
     app.get(
       "/citizen-dashboard",
       verifyIdToken,
